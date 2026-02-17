@@ -1,7 +1,11 @@
 import typing as t
+
+from moexsrc._futoi import normalize_futoi, request_futoi
 from moexsrc.iss_client import ISSClient
 from moexsrc.types import Period
 import datetime
+
+from moexsrc.utils import normalize_market_params
 
 
 class Market:
@@ -63,13 +67,12 @@ class Market:
         """
         Метрики `FUTOI` по заданным параметрам.
         """
-        if self._path != ("futures", "forts", "RFUD"):
-            raise NotImplementedError("FUTOI not implemented for this market")
-        date = date or datetime.date.today()
-        date = date if isinstance(date, datetime.date) else datetime.date.fromisoformat(date)
-        period = period if isinstance(period, Period) else Period.from_literal(period)
+        path = await self.get_path("futoi")
+        period, date = normalize_market_params(period, date)
         if not period in (
             Period.FIVE_MINUTES,
             Period.ONE_DAY,
         ):
             raise ValueError(f"Period {period} not implemented for this dataset")
+        params = {"date": date.isoformat(), "interval": period.value}
+        return await normalize_futoi(request_futoi(self.client, path, params))

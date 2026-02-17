@@ -42,7 +42,7 @@ class ISSClient:
         section: str | None = None,
         deserializer: t.Callable[[dict[str, t.Any]], list[dict[str, t.Any]]] | None = None,
         continuer: t.Callable[[dict[str, t.Any], list[dict[str, t.Any]]], dict[str, t.Any]] | None = None,
-        **params: t.Any,
+        **kwargs: t.Any,
     ) -> AsyncGenerator[dict[str, t.Any]]:
         """
         Запрос на получение данных.
@@ -57,12 +57,12 @@ class ISSClient:
 
         def default_continuer(params: dict[str, t.Any], data: list[dict[str, t.Any]]) -> dict[str, t.Any] | None:
             start = params.get("start", 0)
-            if len(data) > 0:
+            if len(data) > 0 and start >= 0:
                 return dict(start=start + len(data))
             return None
 
         path = path + ".json" if not path.endswith(".json") else path
-        params = dict(params, **{"iss.meta": "off"})
+        params = dict(kwargs, **{"iss.meta": "off"})
         continuer = continuer or default_continuer
 
         if deserializer is None:
@@ -86,7 +86,9 @@ class ISSClient:
             raise RuntimeError("Unreachable")
 
         while True:
-            resp = await self._client.get(path, params=params)
+            resp = await self._client.get(
+                path, params=dict((key, value) for key, value in params.items() if not (key == "start" and value < 0))
+            )
             data, params = process_response(resp)
             for rec in data:
                 yield rec
@@ -105,31 +107,29 @@ class ISSClient:
             data.update([b for b in boards if b["is_primary"]][0])
             return [data]
 
-        def continuer(_0: dict[str, t.Any], _1: list[dict[str, t.Any]]) -> dict[str, t.Any] | None:
-            return None
+        if found := [s async for s in self.request(f"securities/{secid}", "*", deserializer, start=-1)]:
+            data = found[0]
+            path = f"engines/{data['engine']}/markets/{data['market']}/boards/{data['boardid']}/securities/{secid}"
+            if found := [item async for item in self.request(path, "securities", start=-1)]:
+                data.update((key.lower(), value) for key, value in found[0].items())
+            return dict((key, int(value) if key in ("lotsize", "decimals") else value) for key, value in data.items())
+        else:
+            raise LookupError(f"Not found security with code: {secid}")
 
-        async for item in self.request(f"securities/{secid}", "*", deserializer, continuer):
-            return item
-        return None
-
-    async def securities(self, engine: str, market: str, board: str | None = None, only_active=True):
+    async def securities(self, engine: str, market: str, board: str = None):
         """Возвращает информацию об инструментах для заданных параметров."""
-
-        def deserializer(data: dict[str, t.Any]) -> list[dict[str, t.Any]]:
-            result = list()
-            for row in data["data"]:
-                row = dict(zip(data["columns"], row))
-                if board is None or row["primary_boardid"] == board:
-                    result.append(row)
-            return result
-
-        def continuer(params: dict[str, t.Any], data: list[dict[str, t.Any]]) -> dict[str, t.Any] | None:
-            start = params.get("start", 0)
-            if len(data) > 0:
-                return dict(start=start + len(data))
-            elif params.get("is_trading", 1) and not only_active:
-                return dict(is_trading=0)
-            return None
-
-        params = dict(engine=engine, market=market, group_by="group", group_by_filter=f"{engine}_{market}")
-        return await self.request("securities", "securities", deserializer, continuer, **params, is_trading=1)
+        params = dict(start=-1)
+        if board is None:
+            params["primary_board"] = 1
+            path = f"engines/{engine}/markets/{market}/securities"
+        else:
+            path = f"engines/{engine}/markets/{market}/boards/{board}/securities"
+        return [
+            dict(
+                dict((("LOTSIZE" if key == "LOTVOLUME" else key).lower(), value) for key, value in item.items()),
+                is_traded=True,
+                engine=engine,
+                market=market,
+            )
+            async for item in self.request(path, "securities", **params)
+        ]

@@ -2,8 +2,10 @@ import datetime
 import typing as t
 
 from moexsrc._candles import request_candles, normalize_candles
+from moexsrc._futoi import normalize_futoi, request_futoi
 from moexsrc.iss_client import ISSClient
 from moexsrc.types import Period
+from moexsrc.utils import normalize_tickers_params
 
 
 class Ticker:
@@ -39,7 +41,12 @@ class Ticker:
             case "futoi":
                 if self._path[:3] != ("futures", "forts", "RFUD"):
                     raise NotImplementedError("FUTOI not implemented for this ticker")
-                return f"analyticalproducts/futoi/securities/{secid}"
+                sectype = secid
+                if secid not in ("CNYRUBF", "EURRUBF", "GAZPF", "GLDRUBF", "IMOEXF", "SBERF", "USDRUBF"):
+                    sectype = [s for s in self._securities[(engine, market, board)] if s["secid"] == secid][0][
+                        "sectype"
+                    ]
+                return f"analyticalproducts/futoi/securities/{sectype}"
 
             case _:
                 raise ValueError(f"Unknown topic: {topic}")
@@ -49,17 +56,13 @@ class Ticker:
         period: Period | t.Literal["1min", "10min", "1h", "1D", "1W", "1M"] = "10min",
         /,
         *,
-        begin: str | datetime.date = None,
-        end: str | datetime.date = None,
+        begin: str | datetime.date | None = None,
+        end: str | datetime.date | None = None,
     ):
         """
         Данные для "Свечного графика" по заданным параметрам
         """
-        begin = begin or datetime.date.today()
-        end = end or datetime.date.today()
-        begin = begin if isinstance(begin, datetime.date) else datetime.date.fromisoformat(begin)
-        end = end if isinstance(end, datetime.date) else datetime.date.fromisoformat(end)
-        period = period if isinstance(period, Period) else Period.from_literal(period)
+        period, begin, end = normalize_tickers_params(period, begin, end)
         if not period in (
             Period.ONE_MINUTE,
             Period.TEN_MINUTES,
@@ -73,3 +76,25 @@ class Ticker:
         path = await self.get_path("candles")
         params = {"from": begin.isoformat(), "till": end.isoformat(), "interval": period.value}
         return await normalize_candles(request_candles(self._client, path, params))
+
+    async def futoi(
+        self,
+        period: Period | t.Literal["5min", "1D"] = "5min",
+        /,
+        *,
+        begin: str | datetime.date | None = None,
+        end: str | datetime.date | None = None,
+    ):
+        """
+        Метрики `FUTOI` по заданным параметрам.
+        """
+        path = await self.get_path("futoi")
+        period, begin, end = normalize_tickers_params(period, begin, end)
+        if not period in (
+            Period.FIVE_MINUTES,
+            Period.ONE_DAY,
+        ):
+            raise ValueError(f"Period {period} not implemented for this dataset")
+
+        params = {"from": begin.isoformat(), "till": end.isoformat(), "interval": period.value}
+        return await normalize_futoi(request_futoi(self._client, path, params))
