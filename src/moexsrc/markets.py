@@ -1,0 +1,75 @@
+import typing as t
+from moexsrc.iss_client import ISSClient
+from moexsrc.types import Period
+import datetime
+
+
+class Market:
+    """ """
+
+    def __init__(self, client: ISSClient, arg: str, *args: str):
+        self._path = self.resolve_alias(arg) if not args else self.resolve_path(arg, *args)
+        self.client = client
+
+    ALIASES = {
+        ("stock", "shares", "TQBR"): ["stock", "shares", "eq"],
+        ("currency", "selt", "CETS"): ["currency", "selt", "forex", "fx"],
+        ("futures", "forts", "RFUD"): ["futures", "forts", "fo"],
+    }
+
+    @staticmethod
+    def resolve_path(engine: str, market: str, board: str) -> tuple[str, str, str]:
+        candidate = None
+        for engine_, market_, board_ in Market.ALIASES.keys():
+            if engine == engine and market_ == market:
+                candidate = engine_, market_, board_
+                if board == board_:
+                    return engine_, market_, board_
+        if candidate is not None:
+            return candidate
+        raise ValueError(f"Unrecognized market path: {market}")
+
+    @staticmethod
+    def resolve_alias(alias: str) -> tuple[str, str, str]:
+        alias_ = alias.lower()
+        for result, aliases in Market.ALIASES.items():
+            if alias_ in aliases:
+                return result
+        raise ValueError(f"Unrecognized  market alias: {alias}")
+
+    async def get_path(self, topic: t.Literal["candles", "algopack", "futoi"]) -> str:
+        """"""
+        engine, market, board = self._path
+        match topic:
+            case "candles":
+                return f"engines/{engine}/markets/{market}/boards/{board}/securities"
+            case "algopack":
+                raise NotImplementedError
+            case "futoi":
+                if self._path != ("futures", "forts", "RFUD"):
+                    raise NotImplementedError("FUTOI not implemented for this market")
+                return f"analyticalproducts/futoi/securities"
+            case _:
+                raise ValueError(f"Unknown topic: {topic}")
+
+    async def futoi(
+        self,
+        period: Period | t.Literal["5min", "1D"] = "5min",
+        /,
+        *,
+        date: datetime.date | str = None,
+        latest: int | None = None,
+    ):
+        """
+        Метрики `FUTOI` по заданным параметрам.
+        """
+        if self._path != ("futures", "forts", "RFUD"):
+            raise NotImplementedError("FUTOI not implemented for this market")
+        date = date or datetime.date.today()
+        date = date if isinstance(date, datetime.date) else datetime.date.fromisoformat(date)
+        period = period if isinstance(period, Period) else Period.from_literal(period)
+        if not period in (
+            Period.FIVE_MINUTES,
+            Period.ONE_DAY,
+        ):
+            raise ValueError(f"Period {period} not implemented for this dataset")

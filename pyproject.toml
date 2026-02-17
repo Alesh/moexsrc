@@ -11,7 +11,9 @@ authors = [
     { name = "Alesh", email = "alexey.poryadin@xmail.ru" }
 ]
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "httpx>=0.28.1",
+]
 
 [dependency-groups]
 dev = [
