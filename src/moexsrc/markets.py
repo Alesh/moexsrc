@@ -56,6 +56,13 @@ class Market:
             case _:
                 raise ValueError(f"Unknown topic: {topic}")
 
+    async def get_securities(self, *fields, delisted=False, fullinfo=False) -> list[dict[str, t.Any]]:
+        fields = fields or ("engine", "market", "board", "secid")
+        return [
+            dict((key, value) for key, value in item.items() if key in fields)
+            async for item in self.client.securities(*self._path, delisted=delisted, fullinfo=fullinfo)
+        ]
+
     async def futoi(
         self,
         period: Period | t.Literal["5min", "1D"] = "5min",

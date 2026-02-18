@@ -1,40 +1,20 @@
-import typing as t
-
 from moexsrc.iss_client import ISSClient
 
 
 def check_security_eq(security):
-    match security:
-        case {
-            "boardid": _0,
-            "decimals": _1,
-            "engine": _2,
-            "is_traded": _4,
-            "lotsize": _5,
-            "market": _6,
-            "secid": _7,
-        }:
-            pass
-        case _:
-            assert False, "Required fields is not set"
+    requires = ("boardid", "decimals", "engine", "is_traded", "lotsize", "market", "secid")
+    founds = [field in security for field in requires]
+    assert all(founds), (
+        f"Required fields: {[requires[N] for N in range(len(requires)) if not founds[N]]} has not been set"
+    )
 
 
 def check_security_fo(security):
-    match security:
-        case {
-            "boardid": _0,
-            "decimals": _1,
-            "engine": _2,
-            "is_traded": _4,
-            "lotsize": _5,
-            "market": _6,
-            "secid": _7,
-            "assetcode": _8,
-            "sectype": _9,
-        }:
-            pass
-        case _:
-            assert False, "Required fields is not set"
+    requires = ("boardid", "decimals", "engine", "is_traded", "lotsize", "market", "secid", "assetcode", "sectype")
+    founds = [field in security for field in requires]
+    assert all(founds), (
+        f"Required fields: {[requires[N] for N in range(len(requires)) if not founds[N]]} has not been set"
+    )
 
 
 async def test_iss_client_security(api_key):
@@ -43,16 +23,13 @@ async def test_iss_client_security(api_key):
     check_security_eq(security)
 
 
-async def test_iss_client_securities(api_key):
-    client = ISSClient(api_key)
-    securities_ = await securities(client, "stock", "shares", "TQBR")
-    for security in securities_:
+async def test_iss_client_securities(client):
+
+    async for security in client.securities("stock", "shares", "TQBR", fullinfo=True):
         check_security_eq(security)
 
-    securities_ = await securities(client, "currency", "selt", "CETS")
-    for security in securities_:
+    async for security in client.securities("currency", "selt", "CETS", fullinfo=True):
         check_security_eq(security)
 
-    securities_ = await securities(client, "futures", "forts")
-    for security in securities_:
+    async for security in client.securities("futures", "forts", fullinfo=True):
         check_security_fo(security)

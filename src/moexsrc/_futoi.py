@@ -31,7 +31,7 @@ async def request_futoi_market(client: ISSClient, path: str, params: t.Dict[str,
         sectype = security["secid"]
         if sectype not in ("CNYRUBF", "EURRUBF", "GAZPF", "GLDRUBF", "IMOEXF", "SBERF", "USDRUBF"):
             sectype = security["sectype"]
-        path_ = f'analyticalproducts/futoi/securities/{sectype}'
+        path_ = f"analyticalproducts/futoi/securities/{sectype}"
         if interval == 24:
             async for item in request_futoi_daily(client, path_, {**params}):
                 yield item

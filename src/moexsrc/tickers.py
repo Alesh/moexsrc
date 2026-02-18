@@ -1,7 +1,7 @@
 import datetime
 import typing as t
 
-from moexsrc._candles import request_candles, normalize_candles
+from moexsrc._candles import request_candles, normalize_candles, resample_candles
 from moexsrc._futoi import normalize_futoi, request_futoi
 from moexsrc.iss_client import ISSClient
 from moexsrc.types import Period
@@ -53,7 +53,7 @@ class Ticker:
 
     async def candles(
         self,
-        period: Period | t.Literal["1min", "10min", "1h", "1D", "1W", "1M"] = "10min",
+        period: Period | t.Literal["1min", "5min", "10min", "1h", "1D", "1W", "1M"] = "10min",
         /,
         *,
         begin: str | datetime.date | None = None,
@@ -63,7 +63,8 @@ class Ticker:
         Данные для "Свечного графика" по заданным параметрам
         """
         period, begin, end = normalize_tickers_params(period, begin, end)
-        if not period in (
+        path = await self.get_path("candles")
+        if period in (
             Period.ONE_MINUTE,
             Period.TEN_MINUTES,
             Period.ONE_HOUR,
@@ -71,11 +72,15 @@ class Ticker:
             Period.ONE_WEEK,
             Period.ONE_MONTH,
         ):
+            params = {"from": begin.isoformat(), "till": end.isoformat(), "interval": period.value}
+            return await normalize_candles(request_candles(self._client, path, params))
+        elif period in (Period.FIVE_MINUTES,):
+            params = {"from": begin.isoformat(), "till": end.isoformat(), "interval": Period.ONE_MINUTE.value}
+            return await normalize_candles(
+                resample_candles(request_candles(self._client, path, params), Period.FIVE_MINUTES, begin, end)
+            )
+        else:
             raise ValueError(f"Period {period} not implemented for this dataset")
-
-        path = await self.get_path("candles")
-        params = {"from": begin.isoformat(), "till": end.isoformat(), "interval": period.value}
-        return await normalize_candles(request_candles(self._client, path, params))
 
     async def futoi(
         self,

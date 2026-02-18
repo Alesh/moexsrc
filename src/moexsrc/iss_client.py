@@ -1,8 +1,8 @@
 import asyncio
 import json
 import typing as t
-from collections.abc import AsyncGenerator, Generator, Awaitable
-from time import sleep
+from collections.abc import AsyncGenerator, AsyncIterator
+
 
 import httpx
 
@@ -103,33 +103,47 @@ class ISSClient:
         def deserializer(data: dict[str, t.Any]) -> list[dict[str, t.Any]]:
             description = [dict(zip(data["description"]["columns"], row)) for row in data["description"]["data"]]
             boards = [dict(zip(data["boards"]["columns"], row)) for row in data["boards"]["data"]]
-            data = dict((item["name"].lower(), item["value"]) for item in description)
-            data.update([b for b in boards if b["is_primary"]][0])
-            return [data]
+            if description and boards:
+                data = dict((item["name"].lower(), item["value"]) for item in description)
+                data.update([b for b in boards if b["is_primary"]][0])
+                return [data]
+            return []
 
         if found := [s async for s in self.request(f"securities/{secid}", "*", deserializer, start=-1)]:
             data = found[0]
             path = f"engines/{data['engine']}/markets/{data['market']}/boards/{data['boardid']}/securities/{secid}"
             if found := [item async for item in self.request(path, "securities", start=-1)]:
                 data.update((key.lower(), value) for key, value in found[0].items())
-            return dict((key, int(value) if key in ("lotsize", "decimals") else value) for key, value in data.items())
-        else:
-            raise LookupError(f"Not found security with code: {secid}")
+            return data
+            # return dict((key, float(value) if key in ("lotsize", "decimals") else value) for key, value in data.items())
+        raise LookupError(f"Not found security with code: {secid}")
 
-    async def securities(self, engine: str, market: str, board: str = None):
+    async def securities(
+        self, engine: str, market: str, board: str | None = None, delisted=False, fullinfo=False
+    ) -> AsyncIterator[dict[str, t.Any]]:
         """Возвращает информацию об инструментах для заданных параметров."""
-        params = dict(start=-1)
-        if board is None:
-            params["primary_board"] = 1
-            path = f"engines/{engine}/markets/{market}/securities"
-        else:
-            path = f"engines/{engine}/markets/{market}/boards/{board}/securities"
-        return [
-            dict(
-                dict((("LOTSIZE" if key == "LOTVOLUME" else key).lower(), value) for key, value in item.items()),
-                is_traded=True,
-                engine=engine,
-                market=market,
-            )
-            async for item in self.request(path, "securities", **params)
-        ]
+
+        def deserializer(data: dict[str, t.Any]) -> list[dict[str, t.Any]]:
+            result = list()
+            for row in data["data"]:
+                row = dict(zip(data["columns"], row))
+                if board is None or row["primary_boardid"] == board:
+                    result.append(dict(row, engine=engine, market=market, boardid=row["primary_boardid"]))
+            return result
+
+        def continuer(params: dict[str, t.Any], data: list[dict[str, t.Any]]) -> dict[str, t.Any] | None:
+            start = params.get("start", 0)
+            if len(data) > 0:
+                return dict(start=start + len(data))
+            elif params.get("is_trading", 1) and delisted:
+                return dict(is_trading=0)
+            return None
+
+        params = dict(engine=engine, market=market, group_by="group", group_by_filter=f"{engine}_{market}")
+        async for security in self.request("securities", "securities", deserializer, continuer, **params, is_trading=1):
+            if fullinfo:
+                if data := await self.security(security["secid"]):
+                    data.update(security)
+                    yield data
+                    continue
+            yield security

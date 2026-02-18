@@ -3,6 +3,10 @@ from enum import Enum
 
 
 class Period(Enum):
+    """
+    Перечесление периодов руночных данных.
+    """
+
     ONE_MINUTE = 1
     FIVE_MINUTES = 5
     TEN_MINUTES = 10
@@ -13,6 +17,7 @@ class Period(Enum):
 
     @classmethod
     def from_literal(cls, value: t.Literal["1min", "5min", "10min", "1h", "1D", "1W", "1M"]) -> t.Self:
+        """Создает период из литерала."""
         match value:
             case "1min":
                 return Period.ONE_MINUTE
@@ -30,3 +35,15 @@ class Period(Enum):
                 return Period.ONE_MONTH
             case _:
                 raise ValueError(f"Invalid period {value}")
+
+    @property
+    def minutes(self) -> int:
+        """Количество минут в периоде."""
+        if self.value in (1, 5, 10, 60):
+            return self.value
+        elif self.value == 24:
+            return 60 * 24
+        elif self.value == 7:
+            return 60 * 24 * 7
+        else:
+            raise ValueError("This period cannot be measured in minutes.")
