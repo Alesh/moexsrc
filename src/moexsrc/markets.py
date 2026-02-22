@@ -1,4 +1,6 @@
 import typing as t
+
+from moexsrc.resolver import ALIASES, resolve_desc, resolve_alias
 from moexsrc.session import SessionCtx
 from moexsrc.tickers import Ticker
 from moexsrc.types import TickerFilter
@@ -37,30 +39,3 @@ class Market:
                 ticker = Ticker(self._ctx, short["secid"])
                 ticker._desc.update(short)
                 yield ticker
-
-
-ALIASES = {
-    ("stock", "shares", "TQBR"): ["eq", "stock", "shares"],
-    ("currency", "selt", "CETS"): ["fx", "currency", "selt", "forex"],
-    ("futures", "forts", "RFUD"): ["fo", "futures", "forts"],
-}
-
-
-def resolve_desc(engine: str, market: str, boardid: str) -> dict[str, t.Any]:
-    candidate = None
-    for engine_, market_, boardid_ in ALIASES.keys():
-        if engine == engine and market_ == market:
-            candidate = dict(engine=engine_, market=market_, boardid=boardid_)
-            if boardid == boardid_:
-                return candidate
-    if candidate is not None:
-        return candidate
-    raise ValueError(f"Unrecognized market path: {market}")
-
-
-def resolve_alias(alias: str) -> dict[str, t.Any]:
-    alias_ = alias.lower()
-    for result, aliases in ALIASES.items():
-        if alias_ in aliases:
-            return dict(zip(("engine", "market", "boardid"), result))
-    raise ValueError(f"Unrecognized  market alias: {alias}")

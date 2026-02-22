@@ -32,17 +32,16 @@ class Session:
     def __init__(
         self, token: str | None = None, base_url: str | None = None, /, request_timeout: float = 60.0, idle_timeout=0.1
     ) -> None:
-        self._client_kwargs = dict(
-            token=token or TOKEN,
-            base_url=base_url or BASE_URL,
+        self._token = token or TOKEN
+        self._base_url = base_url or BASE_URL
+        self._options = dict(
             request_timeout=request_timeout,
             idle_timeout=idle_timeout,
         )
 
     def __enter__(self):
-        return SessionCtx(
-            client=moexsrc.issclient.ISSClient(**self._client_kwargs),
-        )
+        kwargs = dict((k, v) for k, v in self._options.items() if k in ("request_timeout", "idle_timeout"))
+        return SessionCtx(client=moexsrc.issclient.ISSClient(self._token, self._base_url, **kwargs))
 
     def __exit__(self, *exc_info):
         return False

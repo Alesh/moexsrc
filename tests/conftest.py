@@ -5,13 +5,13 @@ from moexsrc.issclient import ISSClient
 
 
 @pytest.fixture
-def api_key():
+def token():
     return os.environ.get("APIKEY")
 
 
 @pytest.fixture
-def client(api_key):
-    return ISSClient(api_key)
+def client(token):
+    return ISSClient(token)
 
 
 @pytest.fixture
