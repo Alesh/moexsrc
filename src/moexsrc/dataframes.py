@@ -4,10 +4,12 @@ from datetime import date, datetime
 
 import moexsrc.session
 import moexsrc.tickers
+import moexsrc.markets
+import moexsrc.assets
 import moexsrc.utils
-from moexsrc.types import Period, TickerFilter
+from moexsrc.types import Period, TickerFilter, AssetFilter
 
-__all__ = ["Market", "Period", "Ticker"]
+__all__ = ["Asset", "Market", "Period", "Ticker"]
 
 try:
     import pandas as pd
@@ -42,6 +44,34 @@ class Ticker(moexsrc.tickers.Ticker):
         return await dataframe(super().candles(period, begin=begin, end=end, latest=latest))
 
 
+class Asset(moexsrc.assets.Asset):
+    """
+    Класс реализует методы для получения информации по биржевому активу адаптированные для работы с pandas.
+    """
+
+    def __init__(self, assetcode: str):
+        super().__init__(moexsrc.session.ctx, assetcode)
+
+    async def get_tickers(self, **filter: t.Unpack[TickerFilter]) -> list[Ticker]:
+        tickers = list()
+        for ticker_ in await moexsrc.utils.rollup(super().get_tickers(**filter)):
+            ticker = Ticker(ticker_.symbol)
+            ticker._desc.update(ticker_._desc)
+            tickers.append(ticker)
+        return tickers
+
+    async def futoi(
+        self,
+        period: Period | t.Literal["5min", "1D"] = "5min",
+        /,
+        *,
+        begin: str | date | datetime | None = None,
+        end: str | date | datetime | None = None,
+        latest: int | None = None,
+    ) -> pd.DataFrame:
+        return await dataframe(super().futoi(period, begin=begin, end=end, latest=latest))
+
+
 class Market(moexsrc.markets.Market):
     """
     Класс реализует методы для получения информации по биржевому разделу адаптированные для работы с pandas.
@@ -52,8 +82,16 @@ class Market(moexsrc.markets.Market):
 
     async def get_tickers(self, **filter: t.Unpack[TickerFilter]) -> list[Ticker]:
         tickers = list()
-        for ticker_ in await moexsrc.utils.rollup(super().get_tickers(**filter)):
+        for ticker_ in await moexsrc.utils.rollup(super()._get_tickers(**filter)):
             ticker = Ticker(ticker_.symbol)
             ticker._desc.update(ticker_._desc)
             tickers.append(ticker)
         return tickers
+
+    async def get_assets(self, **filter: t.Unpack[AssetFilter]) -> list[Asset]:
+        assets = list()
+        for asset_ in await moexsrc.utils.rollup(super()._get_assets(**filter)):
+            asset = Asset(asset_.symbol)
+            asset._desc.update(asset_._desc)
+            assets.append(asset)
+        return assets

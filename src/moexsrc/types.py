@@ -1,4 +1,5 @@
 import typing as t
+from collections.abc import Sequence
 from datetime import datetime, date
 from enum import Enum
 
@@ -10,6 +11,10 @@ class TickerFilter(t.TypedDict, total=False):
     assetcode: str
     is_traded: bool
     isin: str
+
+
+class AssetFilter(t.TypedDict, total=False):
+    is_traded: bool
 
 
 class Period(Enum):
@@ -88,3 +93,20 @@ class Candle(t.TypedDict):
     value: t.NotRequired[float]
     begin: date | datetime
     end: date | datetime
+
+
+class FutOI(t.TypedDict):
+    assetcode: str
+    clgroup: t.Literal["FIZ", "YUR"]
+    period: Period
+    pos: float
+    pos_long: float
+    pos_long_num: int
+    pos_short: float
+    pos_short_num: int
+    sectype: str
+    sess_id: int
+    session_date: date
+    seqnum: int
+    systime: datetime
+    tradetime: datetime

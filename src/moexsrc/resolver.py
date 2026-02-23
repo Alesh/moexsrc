@@ -1,7 +1,7 @@
 import typing as t
 
 from moexsrc.session import SessionCtx
-from moexsrc.utils import extract
+from moexsrc.utils import extract, rollup
 
 ALIASES = {
     ("stock", "shares", "TQBR"): ["eq", "stock", "shares"],
@@ -34,20 +34,35 @@ class HasDesc(t.Protocol):
     _desc: dict[str, t.Any]
 
 
+NO_SECTYPE = ("CNYRUBF", "EURRUBF", "GAZPF", "GLDRUBF", "IMOEXF", "SBERF", "USDRUBF")  # исключения для тикера FutOI
+
+
 async def resolve_path(ctx: SessionCtx, hd: HasDesc, topic: str) -> str | None:
-    engine, market, boardid, secid = extract(hd._desc, "engine", "market", "boardid", "secid")
+    symbol = None
+    assetcode, secid = extract(hd._desc, "assetcode", "secid")
     if secid is not None:
         # Ticker
-        if not all(map(lambda s: s and len(s), [engine, market, boardid])):
-            if security := await ctx.client.get_security(secid):
-                hd._desc.update(security)
-                engine, market, boardid, secid = extract(hd._desc, "engine", "market", "boardid", "secid")
-            else:
-                return None
+        if security := await ctx.client.get_security(secid):
+            hd._desc.update(security)
+        else:
+            return None
+        symbol = secid
+    else:
+        if assetcode is not None:
+            # Asset
+            tickers = await rollup(hd._get_tickers())
+            symbol = tickers[0].symbol
+            if symbol not in NO_SECTYPE:
+                symbol = symbol[:2]
     match topic:
         case "candles":
             if secid:
+                engine, market, boardid, secid = extract(hd._desc, "engine", "market", "boardid", "secid")
                 return f"engines/{engine}/markets/{market}/boards/{boardid}/securities/{secid}/candles"
+            return None
+        case "futoi":
+            if assetcode and symbol:
+                return f"analyticalproducts/futoi/securities/{symbol}"
             return None
         case _:
             raise ValueError(f"Unknown topic: {topic}")

@@ -1,7 +1,7 @@
 import asyncio
 import typing as t
-from collections.abc import AsyncIterable, AsyncIterator, Iterable, Coroutine, Callable
-from datetime import datetime, date, time
+from collections.abc import AsyncIterable, AsyncIterator, Iterable, Coroutine, Callable, Iterator
+from datetime import datetime, date, time, timedelta
 
 
 async def rollup(it: AsyncIterable[t.Any]) -> list[t.Any]:
@@ -36,6 +36,8 @@ def to_date(value: str | datetime | t.Any) -> date | None:
         return datetime.fromisoformat(value).date()
     elif isinstance(value, datetime):
         return value.date()
+    elif isinstance(value, date):
+        return value
     return None
 
 
@@ -51,6 +53,15 @@ def to_datetime(value: str | t.Any, alignment: t.Literal["begin", "end"] = "begi
     elif isinstance(value, datetime):
         return value
     return None
+
+
+def date_pair_gen(begin: date, end: date, step: int = 2) -> Iterator[tuple[date, date]]:
+    if step > 0:
+        for N in range(0, (end - begin).days + step, step):
+            begin_ = begin + timedelta(days=N)
+            end_ = begin + timedelta(days=N + 1)
+            if begin_ <= end:
+                yield begin_, min(end_, end)
 
 
 class AsyncTasks(Iterable[asyncio.Task]):
